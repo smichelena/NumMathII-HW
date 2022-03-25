@@ -44,9 +44,6 @@ function Lₕ(N)
 	end
 end
 
-# ╔═╡ 465c6499-bc0c-4831-a9b9-f503de372703
-Lₕ([100,100])
-
 # ╔═╡ bf5ccb46-2775-4198-a4f5-033d9698b0b4
 begin
 	N₁ = [4, 5]
@@ -168,7 +165,7 @@ begin
 end;
 
 # ╔═╡ cf8926d8-ffdf-4777-921a-75a101ba0354
-plot([e1,e2], yaxis=:log, xlabel=L"N_k(n)", ylabel=L"||R_h(u) - u_h||_2", label=[L"e_1" L"e_2"])
+plot([e1,e2], yaxis=:log, xlabel=L"N_k(n)", ylabel=L"||R_h(u) - u_h| |_2", label=[L"e_1" L"e_2"])
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -1097,7 +1094,6 @@ version = "0.9.1+5"
 # ╟─9c30f9e0-184b-41d0-9e37-8a77d809e203
 # ╠═39ef0a66-6093-47d7-b194-fd4301610ca8
 # ╠═c10c83ed-3c3c-45a0-b9b0-080fb213b31c
-# ╠═465c6499-bc0c-4831-a9b9-f503de372703
 # ╠═bf5ccb46-2775-4198-a4f5-033d9698b0b4
 # ╠═779c92ca-2ca8-4700-9ff3-24f7c34a401f
 # ╠═bc0ddde6-e57f-4c28-8990-bfbf013fd6a0

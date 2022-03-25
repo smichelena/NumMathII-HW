@@ -4,55 +4,49 @@
 using Markdown
 using InteractiveUtils
 
-# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
-macro bind(def, element)
-    quote
-        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
-        local el = $(esc(element))
-        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
-        el
-    end
-end
-
-# ╔═╡ d3475558-ab7f-11ec-1b8b-df1a295e48f5
+# ╔═╡ 474b4b18-aba2-11ec-0a0b-0f5d02369103
 using PlutoUI, SparseArrays, LinearAlgebra, LaTeXStrings, Plots, PyCall
 
-# ╔═╡ 3a68b6f0-30b8-4d3d-bb82-0dbed432ea73
-la = pyimport("scipy.sparse.linalg")
+# ╔═╡ 1253b32c-def4-491e-8b7f-ba3d18095c8e
+TableOfContents(title="Contents",depth=5)
 
-# ╔═╡ 745abd20-9674-4b13-a8af-697a858d5128
-TableOfContents(title="Contents",depth=2)
-
-# ╔═╡ f76ee0a4-f0fa-4800-bc01-cb49357c0fe0
+# ╔═╡ a724ed82-a112-45f5-a34e-4dc953cb0765
 md"""
-# Solving the heat equation over a cylinder
+# Solving the heat equation over a cylinder, full discretization
 
 Here:
 
 $$\begin{cases}
-	\partial_t u - \dfrac{1}{r^2}\partial_{\theta}^2 u - \partial_z^2u = 0 & \text{in } U = (0,T) \times (0,2\pi) \times (0,1) \\
+	\partial_t u = c \left( \dfrac{1}{r^2}\partial_{\theta}^2 u + \partial_z^2u \right) & \text{in } U = (0,T) \times (0,2\pi) \times (0,1) \\
 	u(0, \theta, z) = u_0(\theta, z) & t=0 \\
-	u(t, \theta, 0) = u(t, \theta, 1) = 0 & \text{in } \partial U_z \\
-	u(t, 0, z) = u(t, 2\pi, z) & \text{in } \partial U_{\theta}
+	\partial_z u(t, \theta, 0) = -\alpha & \text{in } \partial U_z \\
+	\partial_z u(t, \theta, 1) = \alpha & \text{in } \partial U_z \\
+	u(t, 0, z) = u(t, 2\pi, z) & \text{in } \partial U_{\theta} \\
+	\nabla u(t, 0, z) = \nabla u(t, 2\pi, z) & \text{in } \partial U_{\theta} \\
 \end{cases}$$
 
 With:
 
 $$u_0(\theta, z) = \begin{cases} 1 & 0 \leq \theta \leq \frac{\pi}{8} & \left| z - \frac{1}{2} \right| \leq 10^{-1} \\ 0 & \text{ Elsewhere} \end{cases}$$
 
+## Basic problem setup and get_BVP
+
 """
 
-# ╔═╡ e4477b64-0e92-4e21-b19a-bf2ad598b2b5
-u₀(θ,z) = (0 ≤ θ ≤ π/8) && (abs(z - 1/2) ≤ 10^(-1)) ? 1 : 0
+# ╔═╡ d9cc3b4d-c48e-408f-a8a7-57ced8bc0cc0
+u₀(θ,z) = (0 ≤ θ ≤ π/8) && (abs(z - 1/2) ≤ 1e-1) ? 1 : 0
 
-# ╔═╡ 5eb60151-c125-40a0-a3cb-10a46381231e
-function oneD_stencil(N)
+# ╔═╡ abb940ba-6d29-4465-aedb-fd4592b3381a
+function neumann_stencil(N)
 	h = 1/(N+1)
 	norm = 1/h^2
-	return norm*spdiagm(0 => -2*ones(N), -1 => ones(N-1), 1 => ones(N-1))
+	L = spdiagm(0 => -2*ones(N), -1 => ones(N-1), 1 => ones(N-1))
+	L[1,1] = -1
+	L[N,N] = -1
+	return norm*L
 end
 
-# ╔═╡ ba1186b4-a98c-405f-89aa-c0b691e7be6d
+# ╔═╡ be094e21-db8c-4d09-8ca0-a962c039a845
 function periodic_stencil(N)
 	h = (2*π)/(N+1)
 	norm = 1/h^2
@@ -62,15 +56,22 @@ function periodic_stencil(N)
 	return norm*L
 end
 
-# ╔═╡ 2d933075-c8f1-4d3a-98ad-1db4db011d81
-function Lₕ(N, r)
-	return (1/r^2)*kron(sparse(I, N[2], N[2]), periodic_stencil(N[1])) + kron(oneD_stencil(N[2]), sparse(I, N[1]+1, N[1]+1))
+# ╔═╡ d20c34e9-31db-4a08-8cf9-f7b621a7c019
+function Lₕ(N, r, c)
+	return (c/r^2)*kron(sparse(I, N[2], N[2]), periodic_stencil(N[1])) + c*kron(neumann_stencil(N[2]), sparse(I, N[1]+1, N[1]+1))
 end
 
-# ╔═╡ 7b0cb885-cc43-496c-8f80-564fac496abe
-spy(Lₕ([5,4],1/3), ms=3)
+# ╔═╡ 5ad75b4f-4fb2-4710-9c26-70ec387801cc
+spy(Lₕ([5,4],1/5, 1e-2), ms=3)
 
-# ╔═╡ e4015d25-08d6-4dd8-a118-cbc4f46505a1
+# ╔═╡ d7a53d90-1650-4085-a941-47b59e81c729
+function fₕ(N, α, c)
+	h = 1/(N[2]+1)
+	vec = (α*c/h)*vcat(ones(N[1]+1), zeros((N[2]-2)*(N[1]+1)), ones(N[1]+1))
+	return sparse(vec)
+end
+
+# ╔═╡ 13bcf0d5-1bee-47a4-93e1-cb96cdcc3106
 function vectorize_by_row(M)
 	rows = size(M)[1]
 	vec = M[1,:]
@@ -80,37 +81,107 @@ function vectorize_by_row(M)
 	return vec
 end
 
-# ╔═╡ e557dc78-5612-4a08-b62a-7452e9f0a319
+# ╔═╡ 68c6a57e-172c-4a97-ac01-8c641e2c0e7f
 function grid_setup(N)
 	h = [(2*π)/(N[1] + 1), 1/(N[2] + 1)]
-	#eliminate first point, keep last
 	θ = collect(Float64, range(0, length=N[1]+1, stop=2*π-h[1]))
-	#eliminate boundary points
 	z = collect(Float64, range(h[2], length=N[2], stop=1-h[2]))
 	θθ = θ' .* ones(N[2])
 	zz = ones(N[1]+1)' .* z
 	return θ, z, θθ, zz
 end
 
-# ╔═╡ 4654aa2e-9f02-4f41-9cfc-6161abdb1b7f
-begin
-	N = [40, 30]
-	r = 1/3
-	A = Lₕ(N, r)
-	θ, z, θθ, zz = grid_setup(N)
-	initial_u = vectorize_by_row(u₀.(θθ, zz))
-end;
+# ╔═╡ 760c5c4a-6105-4d7e-a0e4-31f493a6e40e
+function get_initial_u(N)
+	_,_,xx,yy = grid_setup(N)
+	return vectorize_by_row(u₀.(xx,yy))
+end
 
-# ╔═╡ 1b9dfe27-56a7-4f46-b28f-af850ddc8caa
+# ╔═╡ 5920c29c-da2e-46e3-91c4-ea32102d271f
+function get_BVP(N, α, r, c)
+	x,y,_,_ = grid_setup(N)
+	return Lₕ(N, r, c), fₕ(N, α, c), get_initial_u(N), x, y
+end
+
+# ╔═╡ 32c86755-146b-4a49-a096-d11d3cd05031
 md"""
-t = $(@bind T Slider(0:0.001:5*1e-1,default=10,show_value=true))
+## theta scheme implementation
+
+here, we use the so called theta-scheme to produce a discretization in time.
+The theta scheme results from taking the ODE that results from the space discretization and then attempting to integrate it numerically. Namely:
+
+
+$\begin{align}
+\dot{u_h}(t) &= L_hu_h(t) + f_h \\
+&\iff \\
+\dfrac{u_h^{n+1} - u_h^n}{\Delta t} &= L_h(\theta u_h^{n+1} + (1-\theta)u_h^n) + f_h
+ \\
+ &\iff\\
+(I - \theta \Delta t L_h)u_h^{n+1} &= (I + \Delta t(1-\theta)L_h)u_h^n + \Delta t f_h
+\end{align}$
+
 """
 
-# ╔═╡ 59eec1a0-5679-4eab-ae01-604f59c7478c
-uₕ(t) = la.expm(t*A)*initial_u
 
-# ╔═╡ eb3e5031-8d9a-41bc-8b77-e981932e374d
-plot(θ, z, uₕ(T), st=:surface, camera=(30, 50), xlabel=L"\theta", ylabel=L"z", zlabel=L"u_h(t)", title="exact solution of ODE problem")
+# ╔═╡ b11fdec9-d785-4f8f-8028-46c4dad500e4
+function theta_scheme(Lₕ, fₕ, uₕ, Δt, θ)
+	N = size(fₕ)[1]
+	In = sparse(I, N, N)
+	lhs = In - θ*Δt*Lₕ
+	rhs = (In + Δt*(1-θ)*Lₕ)*uₕ + Δt*fₕ
+	return lhs\rhs
+end
+
+# ╔═╡ 7fe179c3-bbc0-4d45-bcf2-685c44c811b9
+function solve(Lₕ, fₕ, u₀, Δt, θ, T)
+	previous = u₀
+	t = 0
+	while t ≤ T
+		next = theta_scheme(Lₕ, fₕ, previous, Δt, θ)
+		previous = next
+		t += Δt
+	end
+	return previous
+end
+
+# ╔═╡ 7c42453a-2bf3-46b3-9e77-ca63dad1600d
+md"""
+## Testing with different step sizes
+"""
+
+# ╔═╡ 4e959c29-df0a-465b-abba-1444759622f8
+function get_N(h)
+	N_theta = Int(ceil(2*π/h[1] - 1))
+	N_z = Int(ceil(1/h[2] - 1))
+	return [N_theta, N_z]
+end
+
+# ╔═╡ 9895073b-9761-4bb1-938a-3cab0183fc60
+begin
+	h = [[2*π/10, 1/14],[2*π/20, 1/28],[2*π/30, 1/42],[2*π/40, 1/56]]
+	N = get_N.(h)
+	dt = [1/4 1/5 1/6;1/16 1/20 1/36;1/36 1/45 1/54;1/64 1/80 1/144]
+end;
+
+# ╔═╡ f7e844d2-cf9f-4cc7-9760-217b1ca9f72a
+begin
+	α = 1
+	r = 1/5
+	c = 1e-2
+	T = 1
+	plts = Any[]
+	for i = 1:4
+		L, f, u_initial, x, y = get_BVP(N[i], α, r, c)
+		for j = 1:3
+			γ_θ = convert(Float16, dt[i,j]/h[i][1]^2)
+			γ_z = convert(Float16, dt[i,j]/h[i][2]^2)
+			u = solve(L, f, u_initial, dt[i,j], 0, T)
+			p = plot(x, y, u, st=:surface, camera=(30,50), size=(1000,1100), legend=:none, xlabel=L"\theta", ylabel=L"z",title=L"\gamma_{\theta}={%$γ_θ}, \gamma_z={%$γ_z}")
+			push!(plts, p)
+		end
+	end
+	plot(plts...,layout = (4,3))
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
@@ -124,7 +195,7 @@ SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
 LaTeXStrings = "~1.3.0"
-Plots = "~1.27.1"
+Plots = "~1.27.2"
 PlutoUI = "~0.7.37"
 PyCall = "~1.93.1"
 """
@@ -654,9 +725,9 @@ version = "1.2.0"
 
 [[deps.Plots]]
 deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers", "GR", "GeometryBasics", "JSON", "Latexify", "LinearAlgebra", "Measures", "NaNMath", "Pkg", "PlotThemes", "PlotUtils", "Printf", "REPL", "Random", "RecipesBase", "RecipesPipeline", "Reexport", "Requires", "Scratch", "Showoff", "SparseArrays", "Statistics", "StatsBase", "UUIDs", "UnicodeFun", "Unzip"]
-git-tree-sha1 = "1690b713c3b460c955a2957cd7487b1b725878a7"
+git-tree-sha1 = "90021b03a38f1ae9dbd7bf4dc5e3dcb7676d302c"
 uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-version = "1.27.1"
+version = "1.27.2"
 
 [[deps.PlutoUI]]
 deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "Markdown", "Random", "Reexport", "UUIDs"]
@@ -701,9 +772,9 @@ version = "1.2.1"
 
 [[deps.RecipesPipeline]]
 deps = ["Dates", "NaNMath", "PlotUtils", "RecipesBase"]
-git-tree-sha1 = "995a812c6f7edea7527bb570f0ac39d0fb15663c"
+git-tree-sha1 = "dc1e451e15d90347a7decc4221842a022b011714"
 uuid = "01d81517-befc-4cb6-b9ec-a95719d0359c"
-version = "0.5.1"
+version = "0.5.2"
 
 [[deps.Reexport]]
 git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
@@ -1053,20 +1124,25 @@ version = "0.9.1+5"
 """
 
 # ╔═╡ Cell order:
-# ╠═d3475558-ab7f-11ec-1b8b-df1a295e48f5
-# ╠═3a68b6f0-30b8-4d3d-bb82-0dbed432ea73
-# ╠═745abd20-9674-4b13-a8af-697a858d5128
-# ╟─f76ee0a4-f0fa-4800-bc01-cb49357c0fe0
-# ╠═e4477b64-0e92-4e21-b19a-bf2ad598b2b5
-# ╠═5eb60151-c125-40a0-a3cb-10a46381231e
-# ╠═ba1186b4-a98c-405f-89aa-c0b691e7be6d
-# ╠═2d933075-c8f1-4d3a-98ad-1db4db011d81
-# ╠═7b0cb885-cc43-496c-8f80-564fac496abe
-# ╠═e4015d25-08d6-4dd8-a118-cbc4f46505a1
-# ╠═e557dc78-5612-4a08-b62a-7452e9f0a319
-# ╠═4654aa2e-9f02-4f41-9cfc-6161abdb1b7f
-# ╠═1b9dfe27-56a7-4f46-b28f-af850ddc8caa
-# ╠═59eec1a0-5679-4eab-ae01-604f59c7478c
-# ╠═eb3e5031-8d9a-41bc-8b77-e981932e374d
+# ╠═474b4b18-aba2-11ec-0a0b-0f5d02369103
+# ╠═1253b32c-def4-491e-8b7f-ba3d18095c8e
+# ╟─a724ed82-a112-45f5-a34e-4dc953cb0765
+# ╠═d9cc3b4d-c48e-408f-a8a7-57ced8bc0cc0
+# ╠═abb940ba-6d29-4465-aedb-fd4592b3381a
+# ╠═be094e21-db8c-4d09-8ca0-a962c039a845
+# ╠═d20c34e9-31db-4a08-8cf9-f7b621a7c019
+# ╠═5ad75b4f-4fb2-4710-9c26-70ec387801cc
+# ╠═d7a53d90-1650-4085-a941-47b59e81c729
+# ╠═13bcf0d5-1bee-47a4-93e1-cb96cdcc3106
+# ╠═68c6a57e-172c-4a97-ac01-8c641e2c0e7f
+# ╠═760c5c4a-6105-4d7e-a0e4-31f493a6e40e
+# ╠═5920c29c-da2e-46e3-91c4-ea32102d271f
+# ╟─32c86755-146b-4a49-a096-d11d3cd05031
+# ╠═b11fdec9-d785-4f8f-8028-46c4dad500e4
+# ╠═7fe179c3-bbc0-4d45-bcf2-685c44c811b9
+# ╠═7c42453a-2bf3-46b3-9e77-ca63dad1600d
+# ╠═4e959c29-df0a-465b-abba-1444759622f8
+# ╠═9895073b-9761-4bb1-938a-3cab0183fc60
+# ╠═f7e844d2-cf9f-4cc7-9760-217b1ca9f72a
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
